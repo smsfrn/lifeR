@@ -74,7 +74,6 @@ if(needs_list_to_use == "regional"){
 sp_ebst <- ebirdst_runs %>%
   rename(Common.Name = common_name)
 
-# All needed species with ebst data
 sp_ebst_for_run <- inner_join(sp_ebst, sp_region) %>%
   filter(species_code != "laugul") # not sure why Laughing Gull is tossing an error
 
@@ -98,7 +97,7 @@ mapview::mapview(study_area)
 
 # Crop the occurrence rasters using the vector extent
 occ_crop_combined <- sapply(occ_combined, crop, y = study_area, USE.NAMES = FALSE, overwrite = TRUE)
-occ_crop_combined <- sapply(occ_crop_combined, trim)
+#occ_crop_combined <- sapply(occ_crop_combined, trim)
 
 # Define occurrence threhsold for when a species is "possible"
 possible_occurrence_threshold <- 0.05 # minimum occurrence probabilty for a species to be considered "possible" at a given time/location.

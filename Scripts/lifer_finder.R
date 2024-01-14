@@ -15,7 +15,6 @@ library(magick)
 # Set parameters
 region <- "US" # "US" for whole continental US or "US-NY" for an individual state (replace "NY" with any 2-letter state code).
 user <- "Sam Safran" # enter how you want to be identified in the map caption.
-user_short <- NA #"Sam" # for the legend. can be left blank.
 your_ebird_dat <- here("Data", "sam", "ebird_1705018505439", "MyEBirdData.csv") # path to where your personal eBird data are stored
 needs_list_to_use <- "global" # set to global if you want to map true lifers (species you haven't observed anywhere); set to "regional" if you'd like to map needs for the specified region.
 
@@ -128,9 +127,7 @@ bg_color = "azure"
 week_plots_possible <- list()
 for(i in 1:length(possible_lifers)){
   date <- occ_crop_combined[[1]]@cpp[["names"]][i]
-  if(!is.na(user_short)){legend_lab <- paste0(user_short,"'s\npotential lifers")} else{
-    legend_lab <- "Your potential lifers"
-  }
+  legend_lab <- "Your potential lifers"
   week_plot <-  ggplot() +
     geom_spatraster(data = possible_lifers[[i]]) +
     geom_sf(data = study_area, fill = NA, color = alpha("white", .3)) +   
@@ -146,7 +143,8 @@ for(i in 1:length(possible_lifers)){
     labs(title = "Lifer finder: mapping the birds you've yet to meet",
          tag = paste0(format(ymd(date), format = "%b-%d")),
          #subtitle = "Mapping the birds you've yet to meet",
-         caption = paste0("Lifers mapped for: ", user, "\nData from 2022 eBird Status & Trends products. Analysis and map by Sam Safran.\nA canididate lifer is considered `possible` if the species has a >", round(possible_occurrence_threshold*100,0),"% modeled occurrence probability at the location and date.")) +
+         caption = paste0("Lifers mapped for: ", user, ". \nLifer analysis and map by Sam Safran.\nA candidate lifer is considered `possible` if the species has a >", round(possible_occurrence_threshold*100,0),"% modeled occurrence probability at the location and date.\n
+Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-and-trends): Fink, D., T. Auer, A. Johnston, M. Strimas-Mackey, S. Ligocki, O. Robinson, W. Hochachka,\nL. Jaromczyk, C. Crowley, K. Dunham, A. Stillman, I. Davies, A. Rodewald, V. Ruiz-Gutierrez, C. Wood. 2023. eBird Status and Trends, Data Version: 2022; Released: 2023. Cornell Lab of\nOrnithology, Ithaca, New York. https://doi.org/10.2173/ebirdst.2022.This material uses data from the eBird Status and Trends Project at the Cornell Lab of Ornithology, eBird.org. Any opinions,\nfindings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the Cornell Lab of Ornithology.")) +
     ggthemes::theme_fivethirtyeight() +
     theme(
       rect = element_rect(linetype = 1, colour = NA),
@@ -158,7 +156,7 @@ for(i in 1:length(possible_lifers)){
       axis.title.x = element_blank(),
       axis.text.x = element_blank(),
       axis.text.y = element_blank(),
-      plot.caption = element_text(size = 6, hjust = 0),
+      plot.caption = element_text(size = 5, hjust = 0),
       plot.background = element_rect(fill = bg_color),
       panel.background = element_rect(fill = bg_color),
       panel.grid.major = element_blank(),

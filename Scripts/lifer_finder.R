@@ -144,7 +144,7 @@ for(i in 1:length(possible_lifers)){
          tag = paste0(format(ymd(date), format = "%b-%d")),
          #subtitle = "Mapping the birds you've yet to meet",
          caption = paste0("Lifers mapped for: ", user, ". \nLifer analysis and map by Sam Safran.\nA candidate lifer is considered `possible` if the species has a >", round(possible_occurrence_threshold*100,0),"% modeled occurrence probability at the location and date.\n
-Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-and-trends): Fink, D., T. Auer, A. Johnston, M. Strimas-Mackey, S. Ligocki, O. Robinson,\n W. Hochachka, L. Jaromczyk, C. Crowley, K. Dunham, A. Stillman, I. Davies, A. Rodewald, V. Ruiz-Gutierrez, C. Wood. 2023. eBird Status and Trends, Data Version:\n2022; Released: 2023. Cornell Lab of Ornithology, Ithaca, New York. https://doi.org/10.2173/ebirdst.2022.This material uses data from the eBird Status and Trends\n Project at the Cornell Lab of Ornithology, eBird.org. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s)\nand do not necessarily reflect the views of the Cornell Lab of Ornithology.")) +
+Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-and-trends): Fink, D., T. Auer, A. Johnston, M. Strimas-Mackey, S. Ligocki, O. Robinson,\n W. Hochachka, L. Jaromczyk, C. Crowley, K. Dunham, A. Stillman, I. Davies, A. Rodewald, V. Ruiz-Gutierrez, C. Wood. 2023. eBird Status and Trends, Data Version:\n2022; Released: 2023. Cornell Lab of Ornithology, Ithaca, New York. https://doi.org/10.2173/ebirdst.2022. This material uses data from the eBird Status and Trends\n Project at the Cornell Lab of Ornithology, eBird.org. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s)\nand do not necessarily reflect the views of the Cornell Lab of Ornithology.")) +
     ggthemes::theme_fivethirtyeight() +
     theme(
       rect = element_rect(linetype = 1, colour = NA),
@@ -174,7 +174,7 @@ Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-
       legend.text.align = 0.5) +
   labs(fill = legend_lab)
   week_plot
-  ggsave(filename = here("Results", user_file, region, "Possible_lifers_weekly_maps", paste0("TEST",region,"_",date,".jpg")), plot = week_plot, bg="white", height = 5.35, width = 6.6)
+  ggsave(filename = here("Results", user_file, region, "Possible_lifers_weekly_maps", paste0(region,"_",date,".jpg")), plot = week_plot, bg="white", height = 5.35, width = 6.6)
   week_plots_possible[[i]] <-  week_plot 
 }
 

@@ -3,7 +3,8 @@
 .RData
 .Ruserdata
 Results/*/*/Possible_lifers_weekly_maps
-Results/*/*/Possible_lifers_animation/*hires.gif
+*hires.gif
 Data
 sequence
 Scripts/lifer_finder_full_richness.R
+*Weekly_maps/

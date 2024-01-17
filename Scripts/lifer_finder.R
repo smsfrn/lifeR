@@ -32,8 +32,8 @@ region_info <- data.frame(region = region) %>%
   separate(region, into = c("country", "state"), sep = "-", remove = FALSE)
 
 # Get full eBird taxonomy
-# sp_all <- rebird::ebirdtaxonomy("species") %>%
-#   rename(Common.Name = comName)
+sp_all <- rebird::ebirdtaxonomy("species") %>%
+  rename(Common.Name = comName)
 
 # User global life list
 sp_user_all <- read.csv(your_ebird_dat) %>%
@@ -83,7 +83,7 @@ sp_ebst <- ebirdst_runs %>%
 
 # All needed species with ebst data
 sp_ebst_for_run <- inner_join(sp_ebst, sp_needed) %>%
-  filter(species_code != "laugul") # not sure why Laughing Gull is tossing an error
+  filter(!species_code %in% c("laugul", "yebsap-example")) # not sure why Laughing Gull is tossing an error
 
 # Download data for needed sp and append paths to a species df
 species_list_paths <- sapply(sp_ebst_for_run$species_code, ebirdst_download_status, download_abundance = FALSE, download_occurrence = TRUE, pattern = paste0("occurrence_median_", resolution), USE.NAMES = FALSE)

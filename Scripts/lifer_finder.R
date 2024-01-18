@@ -17,7 +17,7 @@ region <- "US" # "US" for whole continental US or "US-NY" for an individual stat
 user <- "Sam Safran" # enter how you want to be identified in the map caption.
 your_ebird_dat <- here("Data", "sam", "ebird_1705018505439", "MyEBirdData.csv") # path to where your personal eBird data are stored
 needs_list_to_use <- "global" # set to "global" if you want to map true lifers (species you haven't observed anywhere); set to "regional" if you'd like to map needs for the specified region.
-resolution <- "9km" # "3km", "9km", or "27km"
+resolution <- "27km" # "3km", "9km", or "27km"
 
 # Make directories for user & region
 user_file <- tolower(str_replace(user, " ", ""))
@@ -85,9 +85,8 @@ sp_ebst <- ebirdst_runs %>%
 sp_ebst_for_run <- inner_join(sp_ebst, sp_needed) %>%
   filter(!species_code %in% c("laugul", "yebsap-example")) # not sure why Laughing Gull is tossing an error
 
-# Download data for needed sp and append paths to a species df
-species_list_paths <- sapply(sp_ebst_for_run$species_code, ebirdst_download_status, download_abundance = FALSE, download_occurrence = TRUE, pattern = paste0("occurrence_median_", resolution), USE.NAMES = FALSE)
-species_df <- data.frame(sp_ebst_for_run, species_list_paths)
+# Download data for needed sp
+sapply(sp_ebst_for_run$species_code, ebirdst_download_status, download_abundance = FALSE, download_occurrence = TRUE, pattern = paste0("occurrence_median_", resolution), USE.NAMES = FALSE)
 
 # Load occurrence rasters for all species in species_list
 occ_combined <- sapply(sp_ebst_for_run$species_code, load_raster, product = "occurrence", period = "weekly", metric = "median", resolution = resolution)

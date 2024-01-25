@@ -13,9 +13,9 @@ library(tidyterra)
 library(magick)
 
 # Set parameters
-region <- "US" # "US" for whole continental US or "US-NY" for an individual state (replace "NY" with any 2-letter state code).
-user <- "Robert Francis" # enter how you want to be identified in the map caption.
-your_ebird_dat <- here("Data", "robertfrancis", "MyEBirdData.csv") # path to where your personal eBird data are stored
+region <- "US-NY" # must use eBird country or state-level regional codes. Examples: "US" (United States), "US-NY" (New York State, USA), "MX-TAM" (Tamaulipas, Mexico). Find state codes in the URL on eBird's regional pages or in Data/ebird_states.rda. Note that "US" is by default modified to only include continental US.
+user <- "Sam Safran" # enter how you want to be identified in the map caption.
+your_ebird_dat <- here("Data", "sam", "ebird_1705018505439", "MyEBirdData.csv") # path to where your personal eBird data are stored
 needs_list_to_use <- "global" # set to "global" if you want to map true lifers (species you haven't observed anywhere); set to "regional" if you'd like to map needs for the specified region.
 resolution <- "9km" # "3km", "9km", or "27km"
 annotate <- FALSE # If set to TRUE, needed species are labeled on the map at the location where they have the highest abundance each week. This makes the animated map look pretty bad (so it gets output at a much slower frame rate to compensate), but may be of interest to some.
@@ -48,9 +48,9 @@ sp_user_all <- read.csv(your_ebird_dat) %>%
 # User regional list
 sp_user_region <- read.csv(your_ebird_dat) %>%
   separate(State.Province, into = c("country", "state"), sep = "-", remove = FALSE) %>%
-  filter(country == "US")
+  filter(country == region_info$country)
 
-if (region != "US") {
+if(!is.na(region_info$state)) {
   sp_user_region <- filter(sp_user_region, State.Province == region)
 }
 
@@ -105,14 +105,13 @@ prop_combined <- sapply(sp_ebst_for_run$species_code, load_raster, product = "pr
 }
 
 # Vector data for region
-study_area <- ne_states(iso_a2 = "US", returnclass = "sf")
+study_area <- ne_states(iso_a2 = region_info$country, returnclass = "sf")
+if(!is.na(region_info$state)){study_area <- study_area %>% filter(iso_3166_2 == .env$region)}
 if (!region %in% c("US-HI", "US-AK")) {
-  study_area <- filter(study_area, !postal %in% c("HI", "AK"))
-} # if region is US only mapping conttinental US
-if (region != "US") {
-  study_area <- filter(study_area, postal == region_info$state)
-}
+  study_area <- filter(study_area, !iso_3166_2 %in% c("US-HI", "US-AK"))
+} # if region is US only mapping continental US
 study_area <- st_transform(study_area, st_crs(occ_combined[[1]]))
+mapview::mapview(study_area)
 
 # Crop the rasters using the vector extent
 occ_crop_combined <- sapply(occ_combined, crop, y = study_area, USE.NAMES = FALSE, overwrite = TRUE)
@@ -127,7 +126,7 @@ view_sp <- function(x){sp_max <- (raster::raster(max(occ_crop_combined[[x]])))
                      mapview::mapview(sp_max)}
 # view_sp("chclon")
 
-# some of the included species never have occurrence porbabilities >0 in the region. save resources by filtering them out and not processing their layers.
+# some of the included species never have occurrence probabilities >0 in the region. save resources by filtering them out and not processing their layers.
 sp_maxvals <- lapply(occ_crop_combined, minmax) %>% sapply(max)
 sp_ebst_for_run <- bind_cols(sp_ebst_for_run, as.data.frame(sp_maxvals))
 sp_ebst_for_run_in_region <- filter(sp_ebst_for_run, sp_maxvals > 0) 

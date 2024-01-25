@@ -14,10 +14,13 @@ library(magick)
 
 # Set parameters
 region <- "US" # "US" for whole continental US or "US-NY" for an individual state (replace "NY" with any 2-letter state code).
-user <- "Sam Safran" # enter how you want to be identified in the map caption.
-your_ebird_dat <- here("Data", "sam", "ebird_1705018505439", "MyEBirdData.csv") # path to where your personal eBird data are stored
+user <- "Robert Francis" # enter how you want to be identified in the map caption.
+your_ebird_dat <- here("Data", "robertfrancis", "MyEBirdData.csv") # path to where your personal eBird data are stored
 needs_list_to_use <- "global" # set to "global" if you want to map true lifers (species you haven't observed anywhere); set to "regional" if you'd like to map needs for the specified region.
-resolution <- "27km" # "3km", "9km", or "27km"
+resolution <- "9km" # "3km", "9km", or "27km"
+annotate <- FALSE # If set to TRUE, needed species are labeled on the map at the location where they have the highest abundance each week. This makes the animated map look pretty bad (so it gets output at a much slower frame rate to compensate), but may be of interest to some.
+sp_annotation_threshold <- 0 # this controls how many species get annotated on the map if annotate is set to TRUE. A species will only be annotated if the grid cell where it is most abundant contains more than the set proportion of the total population. Lower values mean more species get annotated (though the marked locations will hold smaller and smaller percentages of the total population, which may make for some odd placements for widely dispersed species). Set to 0 to annotate all needed species. A value of 0.01 seems to keep things under control if there are a lot of needed species.
+
 
 # Make directories for user & region
 user_file <- tolower(str_replace(user, " ", ""))
@@ -85,11 +88,21 @@ sp_ebst <- ebirdst_runs %>%
 sp_ebst_for_run <- inner_join(sp_ebst, sp_needed) %>%
   filter(!species_code %in% c("laugul", "yebsap-example")) # not sure why Laughing Gull is tossing an error
 
-# Download data for needed sp
-sapply(sp_ebst_for_run$species_code, ebirdst_download_status, download_abundance = FALSE, download_occurrence = TRUE, pattern = paste0("occurrence_median_", resolution), USE.NAMES = FALSE)
+# Download data for needed sp. if annotating we need species population proportion rasters
+sapply(sp_ebst_for_run$species_code, ebirdst_download_status, download_abundance = TRUE, download_occurrence = TRUE, 
+       pattern = 
+         if(annotate == TRUE){
+           paste0("occurrence_median_", resolution,"|","proportion-population_median_", resolution)} else{
+           paste0("occurrence_median_", resolution)}, 
+       USE.NAMES = FALSE)
 
-# Load occurrence rasters for all species in species_list
+# Load occurrence rasters for all species in species list
 occ_combined <- sapply(sp_ebst_for_run$species_code, load_raster, product = "occurrence", period = "weekly", metric = "median", resolution = resolution)
+
+# Load proportion population rasters for all species in species list
+if(annotate == TRUE){
+prop_combined <- sapply(sp_ebst_for_run$species_code, load_raster, product = "proportion-population", period = "weekly", metric = "median", resolution = resolution)
+}
 
 # Vector data for region
 study_area <- ne_states(iso_a2 = "US", returnclass = "sf")
@@ -101,9 +114,14 @@ if (region != "US") {
 }
 study_area <- st_transform(study_area, st_crs(occ_combined[[1]]))
 
-# Crop the occurrence rasters using the vector extent
+# Crop the rasters using the vector extent
 occ_crop_combined <- sapply(occ_combined, crop, y = study_area, USE.NAMES = FALSE, overwrite = TRUE)
 occ_crop_combined <- sapply(occ_crop_combined, trim)
+
+if(annotate == TRUE){
+  prop_crop_combined <- sapply(prop_combined, crop, y = study_area, USE.NAMES = FALSE, overwrite = TRUE)
+  prop_crop_combined <- sapply(prop_crop_combined, trim)
+}
 
 view_sp <- function(x){sp_max <- (raster::raster(max(occ_crop_combined[[x]])))
                      mapview::mapview(sp_max)}
@@ -113,8 +131,9 @@ view_sp <- function(x){sp_max <- (raster::raster(max(occ_crop_combined[[x]])))
 sp_maxvals <- lapply(occ_crop_combined, minmax) %>% sapply(max)
 sp_ebst_for_run <- bind_cols(sp_ebst_for_run, as.data.frame(sp_maxvals))
 sp_ebst_for_run_in_region <- filter(sp_ebst_for_run, sp_maxvals > 0) 
-occ_crop_combined_ <- occ_crop_combined[names(occ_crop_combined) %in% sp_ebst_for_run_in_region$species_code]
-
+occ_crop_combined <- occ_crop_combined[names(occ_crop_combined) %in% sp_ebst_for_run_in_region$species_code]
+if(annotate == TRUE){prop_crop_combined <- prop_crop_combined[names(prop_crop_combined) %in% sp_ebst_for_run_in_region$species_code]}
+                                         
 # Define occurrence threhsold for when a species is "possible"
 possible_occurrence_threshold <- 0.01 # minimum occurrence probability for a species to be considered "possible" at a given time/location.
 
@@ -136,8 +155,33 @@ possible_lifers <- sapply(possible_lifers, trim)
 # Get maximum lifer count (across all cells and weeks). Needed for fill scale.
 max_val_possible <- lapply(possible_lifers, minmax) %>% sapply(max) %>% max()
 
+# For each species and each week get point of highest abundance and add to an sf dataframe
+polys <- st_sf(geometry = st_sfc(lapply(1:1, function(x) st_geometrycollection())), week = NA, sp = NA)
+polys <- st_set_crs(polys,  crs(prop_crop_combined[[1]]))
+#polys <- data.frame(wk = 1:52, sp = NA)
+polys <- list()
+for(s in 1:length(prop_crop_combined)){
+  sp <- names(prop_crop_combined[s])
+  max_val_cells <- where.max(prop_crop_combined[[sp]], values = TRUE, list=FALSE) %>%
+    as.data.frame() %>%
+    filter(value > 0)
+  max_val_coords <- xyFromCell(prop_crop_combined[[sp]], max_val_cells[,2]) 
+  max_val_sf <- st_as_sf(max_val_coords %>% as.data.frame(), coords  = c(1,2), crs = crs(prop_crop_combined[[1]])) %>%
+    mutate(week = max_val_cells[,1],
+           sp = sp,
+           max_weekly_proportion = max_val_cells[,3])
+  polys[[s]] <- max_val_sf
+  }
+polys <- do.call("rbind", polys) %>%
+  left_join(sp_ebst_for_run_in_region, by = c("sp" = "species_code"))
+
+polys <- st_filter(polys, study_area)
+
 # Generate weekly maps
-bg_color <- "azure"
+bg_color <- "azure3"
+font_color_light <- "grey50" 
+font_color_dark <- "grey20" 
+    
 week_plots_possible <- list()
 for (i in 1:length(possible_lifers)) {
   date <- occ_crop_combined[[1]]@cpp[["names"]][i]
@@ -146,6 +190,15 @@ for (i in 1:length(possible_lifers)) {
   week_plot <- ggplot() +
     geom_spatraster(data = possible_lifers[[i]]) +
     geom_sf(data = study_area, fill = NA, color = alpha("white", .3)) +
+    
+  
+    {if(annotate == TRUE) ggsflabel::geom_sf_text_repel(data = polys %>% filter(week == i & max_weekly_proportion > sp_annotation_threshold), 
+                                  aes(label = Common.Name),
+                                  nudge_x = 4, nudge_y = 8, seed = 10,
+                                  color = "white", size = 2.5, alpha = .8)} +
+    {if(annotate == TRUE) geom_sf(data = polys %>% filter(week == i & max_weekly_proportion > sp_annotation_threshold),
+            color = "white", shape = 1, size = 1.5)} + 
+  
     scale_fill_viridis_c(
       limits = c(0, max_val_possible), na.value = "transparent", option = "turbo",
       guide = guide_colorbar(title.position = "top", title.hjust = 0.2),
@@ -170,21 +223,22 @@ Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-
     theme(
       rect = element_rect(linetype = 1, colour = NA),
       plot.title = element_text(
-        size = 10, hjust = 0, face = "plain", color = "azure3",
+        size = 10, hjust = 0, face = "plain", color = font_color_light,
         margin = margin(0, 0, 15, 0)
       ),
-      plot.tag = element_text(size = 10, face = "bold"),
+      plot.tag = element_text(size = 10, face = "bold", color = font_color_dark),
       axis.title.y = element_blank(),
       axis.title.x = element_blank(),
       axis.text.x = element_blank(),
       axis.text.y = element_blank(),
-      plot.caption = element_text(size = 5, hjust = 0),
+      plot.caption = element_text(size = 5, hjust = 0,color = font_color_light),
       plot.background = element_rect(fill = bg_color),
       panel.background = element_rect(fill = bg_color),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       panel.border = element_blank(),
-      legend.title = element_text(size = 10, face = "bold"),
+      legend.title = element_text(size = 10, face = "bold", color = font_color_dark),
+      legend.text = element_text(color = font_color_light),
       legend.title.align = 1,
       legend.direction = "horizontal",
       legend.key.width = unit(.34, "inch"),
@@ -202,8 +256,13 @@ Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-
 # Generate animated gif
 imgs <- list.files(here(outputDir, "Weekly_maps"), full.names = T)
 img_joined <- image_join(lapply(imgs, image_read))
-img_animated <- image_animate(img_joined, fps = 5)
-image_write(image = img_animated, path = here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_hires.gif")))
-hires <- image_read(here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_hires.gif")))
+if(annotate == TRUE){img_animated <- image_animate(img_joined, fps = .5)}
+if(annotate == FALSE){img_animated <- image_animate(img_joined, fps = 5)}
+if(annotate == TRUE){image_path <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_hires_annotated.gif"))}
+if(annotate == FALSE){image_path <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_hires.gif"))}
+image_write(image = img_animated, path = image_path)
+hires <- image_read(image_path)
 lores <- image_scale(hires, geometry_size_percent(width = 38, height = NULL))
-image_write(image = lores, path = here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_lores.gif")))
+if(annotate == TRUE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_lores_annotated.gif"))}
+if(annotate == FALSE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_lores.gif"))}
+image_write(image = lores, path = image_path_lores)

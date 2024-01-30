@@ -15,12 +15,13 @@ library(magick)
 # Set parameters
 region <- "US" # must use eBird country or state-level regional codes. Examples: "US" (United States), "US-NY" (New York State, USA), "MX-TAM" (Tamaulipas, Mexico). Find state codes in the URL on eBird's regional pages or in Data/ebird_states.rda. Note that "US" is by default modified to only include continental US.
 user <- "Sam Safran" # enter how you want to be identified in the map caption.
-your_ebird_dat <- here("Data", "sam", "ebird_1705018505439", "MyEBirdData.csv") # path to where your personal eBird data are stored
+user_short <- NA # e.g., "Sam" - optional to customize name in legend. Typically a first name. Leave this defined as NA and it will read "My potential lifers." Haven't figured out how to center over legend for longer names, so this may not look great.
+your_ebird_dat <-  here("Data", "sam", "ebird_1705018505439", "MyEBirdData.csv") # path to where your personal eBird data are stored
 needs_list_to_use <- "global" # set to "global" if you want to map true lifers (species you haven't observed anywhere); set to "regional" if you'd like to map needs for the specified region.
 resolution <- "9km" # "3km", "9km", or "27km"
-annotate <- FALSE # If set to TRUE, needed species are labeled on the map at the location where they have the highest abundance each week. This makes the animated map look pretty bad (so it gets output at a much slower frame rate to compensate), but may be of interest to some.
-sp_annotation_threshold <- 0 # this controls how many species get annotated on the map if annotate is set to TRUE. A species will only be annotated if the grid cell where it is most abundant contains more than the set proportion of the total population. Lower values mean more species get annotated (though the marked locations will hold smaller and smaller percentages of the total population, which may make for some odd placements for widely dispersed species). Set to 0 to annotate all needed species. A value of 0.01 seems to keep things under control if there are a lot of needed species.
-
+annotate <- FALSE # If set to TRUE, needed species are labeled on the map at the location where they have the highest abundance each week. This makes the animated map look pretty bad (so it gets output at a much slower frame rate to compensate), but may be of interest to some. the "dark" color theme works best for this.
+sp_annotation_threshold <- 0.01 # this controls how many species get annotated on the map if annotate is set to TRUE. A species will only be annotated if the grid cell where it is most abundant contains more than the set proportion of the total population. Lower values mean more species get annotated (though the marked locations will hold smaller and smaller percentages of the total population, which may make for some odd placements for widely dispersed species). Set to 0 to annotate all needed species. A value of 0.01 seems to keep things under control if there are many needed species.
+theme <- "light_blue" # accepted values "light_blue", "dark", "light_green"
 
 # Make directories for user & region
 user_file <- tolower(str_replace(user, " ", ""))
@@ -154,6 +155,7 @@ possible_lifers <- sapply(possible_lifers, trim)
 # Get maximum lifer count (across all cells and weeks). Needed for fill scale.
 max_val_possible <- lapply(possible_lifers, minmax) %>% sapply(max) %>% max()
 
+if(annotate == TRUE){
 # For each species and each week get point of highest abundance and add to an sf dataframe
 polys <- st_sf(geometry = st_sfc(lapply(1:1, function(x) st_geometrycollection())), week = NA, sp = NA)
 polys <- st_set_crs(polys,  crs(prop_crop_combined[[1]]))
@@ -175,17 +177,32 @@ polys <- do.call("rbind", polys) %>%
   left_join(sp_ebst_for_run_in_region, by = c("sp" = "species_code"))
 
 polys <- st_filter(polys, study_area)
+}
 
 # Generate weekly maps
-bg_color <- "azure3"
-font_color_light <- "grey50" 
-font_color_dark <- "grey20" 
-    
+if(theme == "light_blue"){
+  bg_color <- "azure2"  
+  font_color_light <- "grey50" 
+  font_color_dark <- "grey20"  
+}
+
+if(theme == "light_green"){
+  bg_color <- "#EBF5DF"
+    font_color_light <- "#9CC185" 
+      font_color_dark <- "#141B0E"  
+}
+
+if(theme == "dark"){
+  bg_color = viridisLite::turbo(1)
+  font_color_light <- "white"
+  font_color_dark <- "grey90" 
+}
+
 week_plots_possible <- list()
 for (i in 1:length(possible_lifers)) {
   date <- occ_crop_combined[[1]]@cpp[["names"]][i]
-  if(needs_list_to_use == "global"){legend_lab <- "Your potential lifers"}
-  if(needs_list_to_use == "regional"){legend_lab <- "Your regional needs"} 
+  if(needs_list_to_use == "global"){legend_lab <- paste0(ifelse(is.na(user_short), paste0("My"), paste0(user_short, "'s")), " potential lifers")}
+  if(needs_list_to_use == "regional"){legend_lab <- paste0(ifelse(is.na(user_short), paste0("My"), paste0(user_short, "'s")), " regional needs")}
   week_plot <- ggplot() +
     geom_spatraster(data = possible_lifers[[i]]) +
     geom_sf(data = study_area, fill = NA, color = alpha("white", .3)) +
@@ -200,7 +217,7 @@ for (i in 1:length(possible_lifers)) {
   
     scale_fill_viridis_c(
       limits = c(0, max_val_possible), na.value = "transparent", option = "turbo",
-      guide = guide_colorbar(title.position = "top", title.hjust = 0.2),
+      guide = guide_colorbar(title.position = "top", title.hjust = .5),
       # get the units (species) after the last value in the legend
       labels = function(x) {
         lab <- " species"
@@ -237,7 +254,7 @@ Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-
       panel.grid.minor = element_blank(),
       panel.border = element_blank(),
       legend.title = element_text(size = 10, face = "bold", color = font_color_dark),
-      legend.text = element_text(color = font_color_light),
+      legend.text = element_text(color = font_color_dark),
       legend.title.align = 1,
       legend.direction = "horizontal",
       legend.key.width = unit(.34, "inch"),
@@ -257,11 +274,13 @@ imgs <- list.files(here(outputDir, "Weekly_maps"), full.names = T)
 img_joined <- image_join(lapply(imgs, image_read))
 if(annotate == TRUE){img_animated <- image_animate(img_joined, fps = .5)}
 if(annotate == FALSE){img_animated <- image_animate(img_joined, fps = 5)}
-if(annotate == TRUE){image_path <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_hires_annotated.gif"))}
-if(annotate == FALSE){image_path <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_hires.gif"))}
+if(annotate == TRUE){image_path <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_",theme,"_hires_annotated.gif"))}
+if(annotate == FALSE){image_path <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_",theme,"_hires.gif"))}
 image_write(image = img_animated, path = image_path)
 hires <- image_read(image_path)
 lores <- image_scale(hires, geometry_size_percent(width = 38, height = NULL))
-if(annotate == TRUE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_lores_annotated.gif"))}
-if(annotate == FALSE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_lores.gif"))}
+if(annotate == TRUE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_",theme,"_lores_annotated.gif"))}
+if(annotate == FALSE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_",theme,"_lores.gif"))}
 image_write(image = lores, path = image_path_lores)
+}
+

@@ -282,5 +282,3 @@ lores <- image_scale(hires, geometry_size_percent(width = 38, height = NULL))
 if(annotate == TRUE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_",theme,"_lores_annotated.gif"))}
 if(annotate == FALSE){image_path_lores <- here(outputDir, "Animated_map", paste0(region, "_Animated_map_annual_",theme,"_lores.gif"))}
 image_write(image = lores, path = image_path_lores)
-}
-

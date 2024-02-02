@@ -66,7 +66,7 @@ sp_region <- ebirdregionspecies(region) %>%
   left_join(sp_all) %>%
   drop_na(Common.Name)
 
-# Species user needs in region
+# User needs in region
 if (needs_list_to_use == "global") {
   sp_needed <- setdiff(sp_region$Common.Name, sp_user_all$Common.Name) %>%
     as.data.frame() %>%
@@ -89,7 +89,7 @@ sp_ebst <- ebirdst_runs %>%
 sp_ebst_for_run <- inner_join(sp_ebst, sp_needed) %>%
   filter(!species_code %in% c("laugul", "yebsap-example")) # not sure why Laughing Gull is tossing an error
 
-# Download data for needed sp. if annotating we need species population proportion rasters
+# Download occurrence data for needed sp. If annotating we also need species population proportion rasters.
 sapply(sp_ebst_for_run$species_code, ebirdst_download_status,
   download_abundance = TRUE, download_occurrence = TRUE,
   pattern =
@@ -109,7 +109,7 @@ if (annotate == TRUE) {
   prop_combined <- sapply(sp_ebst_for_run$species_code, load_raster, product = "proportion-population", period = "weekly", metric = "median", resolution = resolution)
 }
 
-# Vector data for region
+# Vector data for region (country/state polygons)
 study_area <- ne_states(iso_a2 = region_info$country, returnclass = "sf")
 if (!is.na(region_info$state)) {
   study_area <- study_area %>% filter(iso_3166_2 == .env$region)
@@ -123,7 +123,7 @@ mapview::mapview(study_area)
 # Define occurrence threshold for when a species is "possible"
 possible_occurrence_threshold <- 0.01 # minimum occurrence probability for a species to be considered "possible" at a given time/location.
 
-# Function used to drop rasters for species not meeting occ threshold. This is to help save resources by filtering them out and not processing their layers.
+# Function used to drop rasters for species that do not meet occ threshold. This is to help save resources by filtering them out and not processing their layers.
 filter_rasters_to_sp_above_threshold <- function(z) {
   sp_above_occ_threhsold <- sapply(z, minmax) %>%
     apply(2, max) %>%
@@ -144,7 +144,14 @@ occ_crop_combined <- sapply(occ_crop_combined, terra::mask, mask = terra::vect(s
 occ_crop_combined <- filter_rasters_to_sp_above_threshold(occ_crop_combined) # drop species not meeting threshold
 # occ_crop_combined <- sapply(occ_crop_combined, terra::trim)
 
-# New version of data frame with only species meeting occ threshold
+if (annotate == TRUE) {
+  prop_crop_combined <- sapply(prop_combined, terra::crop, y = terra::vect(study_area))
+  prop_crop_combined <- filter_rasters_to_sp_above_threshold(prop_crop_combined) # drop species not meeting threshold
+  prop_crop_combined <- sapply(prop_crop_combined, terra::mask, mask = terra::vect(study_area))
+  prop_crop_combined <- filter_rasters_to_sp_above_threshold(prop_crop_combined) # drop species not meeting threshold
+}
+
+# New version of species data frame with only species meeting occ threshold
 sp_ebst_for_run_in_region <- left_join(
   x = sapply(occ_crop_combined, minmax) %>%
     apply(2, max) %>%
@@ -153,13 +160,6 @@ sp_ebst_for_run_in_region <- left_join(
     rename("max_val" = "."),
   y = sp_ebst_for_run
 )
-
-if (annotate == TRUE) {
-  prop_crop_combined <- sapply(prop_combined, terra::crop, y = terra::vect(study_area))
-  prop_crop_combined <- filter_rasters_to_sp_above_threshold(prop_crop_combined) # drop species not meeting threshold
-  prop_crop_combined <- sapply(prop_crop_combined, terra::mask, mask = terra::vect(study_area))
-  prop_crop_combined <- filter_rasters_to_sp_above_threshold(prop_crop_combined) # drop species not meeting threshold
-}
 
 # Function for viewing summarized species rasters (not run)
 view_sp <- function(x) {
@@ -178,15 +178,10 @@ for (i in 1:52) {
   possible_lifers[[i]] <- week_slice
 }
 
-# Reproject, mask, and trim weekly rasters for plotting
+# Reproject, mask, and trim weekly lifer count rasters for plotting
 possible_lifers <- sapply(possible_lifers, terra::project, y = "epsg:5070", method = "near")
 possible_lifers <- sapply(possible_lifers, terra::mask, mask = project(vect(study_area), y = "epsg:5070"))
 possible_lifers <- sapply(possible_lifers, trim)
-
-# Get maximum lifer count (across all cells and weeks). Needed for fill scale.
-max_val_possible <- lapply(possible_lifers, minmax) %>%
-  sapply(max) %>%
-  max()
 
 # For each species and each week get point of highest abundance and add to an sf dataframe (for annotations)
 if (annotate == TRUE) {
@@ -232,7 +227,12 @@ if (theme == "dark") {
   font_color_dark <- "grey90"
 }
 
-# Get legend breaks/labels/range
+# Get maximum lifer count (across all cells and weeks). Needed for legend.
+max_val_possible <- lapply(possible_lifers, minmax) %>%
+  sapply(max) %>%
+  max()
+
+# Get legend breaks/labels/range based on maximum count.
 legend_breaks <- c(pretty(1:max_val_possible))
 labels <- function(x) {
   lab <- " species"
@@ -244,7 +244,7 @@ labels <- function(x) {
 legend_labels <- labels(legend_breaks)
 legend_breaks_last <- last(legend_breaks)
 
-# Generate and save map for each week
+# Generate and save map for each week.
 week_plots_possible <- list()
 for (i in 1:length(possible_lifers)) {
   date <- occ_crop_combined[[1]]@cpp[["names"]][i]
@@ -311,9 +311,9 @@ Data from 2022 eBird Status & Trends products (https://ebird.org/science/status-
       legend.text = element_text(color = font_color_dark),
       legend.title.align = 1,
       legend.direction = "horizontal",
-      legend.key.width = unit(.34, "inch"),
+      legend.key.width = unit(.32, "inch"),
       legend.key.height = unit(.06, "inch"),
-      legend.position = c(.773, 1.03),
+      legend.position = c(.768, 1.03),
       plot.tag.position = c(0.05, .94),
       legend.background = element_rect(colour = NA, fill = NA, linetype = "solid"),
       legend.text.align = 0.5
